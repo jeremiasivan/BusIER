@@ -44,6 +44,10 @@ if (!dir.exists(dir_lineage)) {
 
 ## Run BUSCO on reference sequences
 ```{r check-busco-ref}
+write.table(c("",
+              "--------- Reference Sequence -------"),
+              file=fn_log, quote=F, row.names=F, col.names=F, append=T)
+
 dir_busco_ref <- paste0(dir_busco, "refseq/")
 if (!dir.exists(dir_busco_ref)) {
     dir.create(dir_busco_ref, recursive=T)
@@ -116,6 +120,10 @@ if (length(shared_busco) == 0) {
 
 ## Extract BUSCOs for short reads
 ```{r check-busco-read}
+write.table(c("",
+              "------------ Short Reads -----------"),
+              file=fn_log, quote=F, row.names=F, col.names=F, append=T)
+
 dir_busco_read <- paste0(dir_busco, "short_reads/")
 if (!dir.exists(dir_busco_read)) {
     dir.create(dir_busco_read, recursive=T)
@@ -140,8 +148,17 @@ for (prefix in ls_prefix) {
     read <- unlist(strsplit(prefix, split="--"))[1]
     ref <- unlist(strsplit(prefix, split="--"))[2]
 
-    # input BAM file
-    file_input_bam <- paste0(dir_readmap, prefix, "/", prefix, ".bam")
+    # extract reference sequence
+    dir_ref <- paste0(dir_refseq, ref, "/ncbi_dataset/data/", ref, "/")
+    file_ref <- list.files(dir_ref, pattern="*.fna", recursive=F, full.names=T)
+    
+    if (length(file_ref) != 1) {
+        file_ref <- file_ref[1]
+        log4r::warn(fn_logger, paste0("Multiple references are found for ", ref, ". ", file_ref, " is selected."))
+    }
+
+    # input VCF file
+    file_input_vcf <- paste0(dir_readmap, prefix, "/", prefix, ".vcf.gz")
 
     # iterate over shared BUSCOs
     foreach (busco = shared_busco) %dopar% {
@@ -152,18 +169,16 @@ for (prefix in ls_prefix) {
         # extract start and stop positions
         coordinates <- unlist(strsplit(busco_header, split=">"))[2]
 
-        # output files
-        file_out_bam <- paste0(dir_busco_out, busco, ".bam")
-        file_out_1 <- paste0(dir_busco_out, busco, ".1.fna")
-        file_out_2 <- paste0(dir_busco_out, busco, ".2.fna")
+        # output file
+        file_out <- paste0(dir_busco_out, busco, ".fna")
 
-        # check if files exist
-        if (all(file.exists(file_out_bam, file_out_1, file_out_2)) && !params$redo) {
+        # check if file exists
+        if (file.exists(file_out) && !params$redo) {
             return(NULL)
         }
 
         # extract BUSCO
-        f_extract_busco_from_BAM(file_input_bam, file_out_bam, coordinates, file_out_1, file_out_2, params$exe_samtools)
+        f_extract_busco(file_input_vcf, file_ref, coordinates, file_out, params$exe_samtools, params$exe_bcftools)
     }
 
     log4r::info(fn_logger, paste0("File created/modified: BUSCOs for ", prefix, "."))
@@ -207,7 +222,7 @@ foreach (busco = shared_busco) %dopar% {
     # extract BUSCO alignment from short reads
     ls_busco_reads <- list.dirs(dir_busco_read, recursive=F, full.names=F)
     for (read in ls_busco_reads) {
-        file_busco_read <- paste0(dir_busco_read, read, "/", busco, ".1.fna")
+        file_busco_read <- paste0(dir_busco_read, read, "/", busco, ".fna")
         if (!file.exists(file_busco_read)) {
             next
         }
@@ -225,6 +240,10 @@ stopCluster(nwcl)
 
 ## Generate BUSCO trees
 ```{r busco-tree}
+write.table(c("",
+              "------------ BUSCO Trees -----------"),
+              file=fn_log, quote=F, row.names=F, col.names=F, append=T)
+              
 # create doSNOW cluster
 nwcl <- makeCluster(params$thread)
 doSNOW::registerDoSNOW(nwcl)

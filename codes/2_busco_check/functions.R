@@ -1,7 +1,7 @@
 # functions for codes/2_busco_check
 
 # function: read map fastq to reference sequence using BWA-MEM2
-f_read_map <- function(refseq, fastq, thread, exe_bwamem2, file_sam) {
+f_read_mapping <- function(refseq, fastq, thread, exe_bwamem2, file_sam) {
     # index reference file
     cmd_index <- paste(exe_bwamem2, "index", refseq)
     system(cmd_index)
@@ -18,41 +18,28 @@ f_read_map <- function(refseq, fastq, thread, exe_bwamem2, file_sam) {
     system(cmd_readmap)
 }
 
-# function: convert SAM to BAM and FASTA
-f_convert_sam2bam <- function(prefix, dir_output, thread, exe_samtools) {
+# function: convert SAM to BAM and VCF
+f_variant_calling <- function(prefix, dir_output, thread, refseq, exe_samtools, exe_bcftools) {
+    # initiate variables
     fn_sam <- paste0(dir_output, "/", prefix, ".sam")
-    fn_bam_fixmate <- paste0(dir_output, "/", prefix, ".fixmate.bam")
-    fn_bam_sort <- paste0(dir_output, "/", prefix, ".sort.bam")
-    fn_bam_markdup <- paste0(dir_output, "/", prefix, ".markdup.bam")
     fn_bam <- paste0(dir_output, "/", prefix, ".bam")
+    fn_vcf <- paste0(dir_output, "/", prefix, ".vcf.gz")
+
+    nthread <- paste("--threads", thread)
 
     # run samtools fixmate
-    cmd_fixmate <- paste(exe_samtools, "fixmate",
-                         "--threads", thread,
-                         "-O bam,level=1",
-                         "-m", fn_sam, fn_bam_fixmate)
-    system(cmd_fixmate)
-
-    # run samtools sort
-    cmd_sort <- paste(exe_samtools, "sort",
-                      "--threads", thread,
-                      "-l 1",
-                      "-o", fn_bam_sort, fn_bam_fixmate)
-    system(cmd_sort)                  
+    cmd_samtools <- paste(exe_samtools, "view", nthread, "-b -u", fn_sam, "|",
+                          exe_samtools, "collate", nthread, "-O -u - |",
+                          exe_samtools, "fixmate", nthread, "-m -u - - |",
+                          exe_samtools, "sort", nthread, "-u - |",
+                          exe_samtools, "markdup", nthread, "-", fn_bam)
+    system(cmd_samtools)                  
     
-    # run samtools markdup
-    cmd_markdup <- paste(exe_samtools, "markdup",
-                         "--threads", thread,
-                         "-O bam,level=1",
-                         fn_bam_sort, fn_bam_markdup) 
+    # run bcftools mpileup
+    cmd_bcftools <- paste(exe_bcftools, "mpileup", nthread, "-Ou -f", refseq, fn_bam, "|",
+                          exe_bcftools, "call", nthread, "-Ou -mv |",
+                          exe_bcftools, "norm", nthread, "-f", refseq, "-Oz -o", fn_vcf) 
     system(cmd_markdup)
-
-    # run samtools view to BAM
-    cmd_view <- paste(exe_samtools, "view",
-                      "--threads", thread,
-                      fn_bam_markdup, 
-                      "-o", fn_bam)
-    system(cmd_view)
 }
 
 # function: run BUSCO pipeline
@@ -70,25 +57,11 @@ f_run_busco <- function(fn_fasta, lineage, prefix, dir_output, mode, thread, exe
 }
 
 # functions: extract BUSCO region
-f_extract_busco_from_BAM <- function(fn_bam, fn_out_bam, coordinates, fn_out_1, fn_out_2, exe_samtools) {
-    # run samtools view
-    cmd_view <- paste(exe_samtools, "view",
-                      "-o", fn_out_bam,
-                      "-b", fn_bam,
-                      coordinates)
-    
-    # check if there is an error message
-    out_msg <- system(cmd_view, intern=TRUE)
-    if (length(grep(".+specifies an invalid region or unknown reference*", out_msg)) != 0) {
-        unlink(fn_out_bam)
-        return(NULL)
-    }
-
-    # run samtools fasta
-    cmd_fasta <- paste(exe_samtools, "fasta",
-                       "-1", fn_out_1, "-2", fn_out_2,
-                       fn_out_bam)                                          
-    system(cmd_fasta)
+f_extract_busco <- function(fn_vcf, refseq, coordinates, fn_out, exe_samtools, exe_bcftools) {
+    # extract consensus BUSCO sequence
+    cmd_consensus <- paste(exe_samtools, "faidx", refseq, coordinates, "|",
+                           exe_bcftools, "consensus", fn_vcf, "-o", fn_out)                                    
+    system(cmd_consensus)
 }
 
 # functions: combine individual FASTA as MSA

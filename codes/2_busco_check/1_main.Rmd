@@ -15,6 +15,8 @@ params:
   # executables
   exe_bwamem2: ""
   exe_samtools: ""
+  exe_bcftools: ""
+
   exe_busco: ""
   exe_iqtree2: ""
   exe_mafft: ""
