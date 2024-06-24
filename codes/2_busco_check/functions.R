@@ -365,138 +365,17 @@ f_tips_to_species <- function(fn_treefile, fn_treefile_species, ls_species_name)
     writeLines(tre, con=fn_treefile_species)
 }
 
-# run MNTD on BUSCOs
-f_run_mntd <- function(ls_busco, ls_shortreads, dir_busco_tree, ls_species_name, prefix, thread) {
-    # output files
-    fn_mntd_summary <- paste0(prefix, ".mntd.sumtable")
+# function: change tips from species name to accesion ID for reference sequences
+f_ref_tips_to_id <- function(fn_treefile, df_refs) {
+    # read input file
+    tre <- readLines(fn_treefile)
 
-    # create doSNOW cluster
-    nwcl <- makeCluster(thread)
-    doSNOW::registerDoSNOW(nwcl)
-
-    # iterate over BUSCOs
-    ls_output <- foreach (busco = ls_busco, .combine='c') %dopar% {
-        # initiate variables
-        df_presence <- data.frame(grouping=character(), taxon=character(), present=numeric())
-
-        # output variables
-        mntd_sum <- list(busco=busco)
-
-        # check if treefile exists
-        fn_tree <- paste0(dir_busco_tree, busco, "/", busco, "_aligned.fa.treefile")
-
-        # read tree
-        tre <- ape::read.tree(fn_tree)
-        ls_tips <- tre$tip.label
-
-        # iterate over reference sequences
-        for (read in ls_shortreads) {
-            # extract list of taxa with specific read
-            ls_taxa <- ls_tips[stringr::str_detect(ls_tips, read)]
-
-            # check the number of taxa
-            if (length(ls_taxa) < 3) {
-                next
-            }
-            
-            # add taxa to the presence/absence table
-            for (taxon in ls_taxa) {
-                df_presence <- rbind(df_presence, list(grouping=read, taxon=taxon, present=1))
-            }
-        }
-
-        # check if data.frame is empty
-        if (nrow(df_presence) == 0) {
-            return(NULL)
-        }
-
-        # check if there is only one grouping
-        if (length(unique(df_presence$grouping)) == 1) {
-            return(NULL)
-        }
-
-        # transform data.frame to community format used in picante
-        df_presence <- labdsv::matrify(df_presence)
-
-        # run MNTD
-        mntd_result <- picante::ses.mntd(df_presence, ape::cophenetic.phylo(tre))
-
-        # iterate over reference sequences
-        for (i in 1:nrow(mntd_result)) {
-            read_name <- rownames(mntd_result)[i]
-
-            # update variables
-            if (mntd_result$mntd.obs.z[i] > 0 && mntd_result$mntd.obs.p[i] > 0.95) {
-                mntd_sum[[ls_species_name[read_name]]] <- "S"
-            } else if (mntd_result$mntd.obs.z[i] < 0 && mntd_result$mntd.obs.p[i] < 0.05) {
-                mntd_sum[[ls_species_name[read_name]]] <- "C"
-            } else {
-                mntd_sum[[ls_species_name[read_name]]] <- ""
-            }
-        }
-
-        return(list(mntd_sum=mntd_sum))
+    # iterate over tips
+    for (i in 1:nrow(df_refs)) {
+        tre <- gsub(df_refs$species[i], df_refs$id[i], tre)
     }
 
-    stopCluster(nwcl)
-
-    # save significant clusters and spreads
-    ls_mntd_sum_out <- ls_output[names(ls_output)=="mntd_sum"]
-    df_mntd_sum_output <- data.table::as.data.table(do.call(rbind, ls_mntd_sum_out), fill=TRUE)
-    data.table::fwrite(df_mntd_sum_output, file=fn_mntd_summary, sep="\t", quote=F, row.names=F)
-
-    # plot data.frame
-    f_mntd_visualization(fn_mntd_summary, prefix)
-}
-
-# function: plot MNTD results
-f_mntd_visualization <- function(fn_mntd_summary, prefix) {
-    # output files
-    fn_mntd_tiff <- paste0(prefix, ".mntd.tiff")
-    # fn_mntd_cluster_tiff <- paste0(prefix, ".mntd.cluster.tiff")
-    # fn_mntd_spread_tiff <- paste0(prefix, ".mntd.spread.tiff")
-
-    # open file
-    df_mntd <- data.table::fread(fn_mntd_summary)
-
-    # generate plots
-    df_mntd_melt <- reshape2::melt(df_mntd, id.vars="busco")
-    # df_mntd_melt_cluster <- df_mntd_melt[df_mntd_melt$value == "C" | df_mntd_melt$value == "",]
-    # df_mntd_melt_spread <- df_mntd_melt[df_mntd_melt$value == "S" | df_mntd_melt$value == "",]
-
-    # plot significant clusters
-    tiff(file=fn_mntd_tiff, units="px", width=2880, height=1800)
-    print(ggplot(df_mntd_melt, aes(x=variable, y=busco)) +
-        geom_tile(aes(fill=value), color="white") +
-        ggtitle("BUSCOs with Significant Clusters and Spreads") + ylab("BUSCO") +
-        scale_fill_manual(values=c("white","red","blue")) +
-        scale_x_discrete(guide = guide_axis(angle = 45)) +
-        theme(plot.title = element_text(hjust = 0.5, size = 50),
-            plot.margin = margin(1.25, 1.25, 1.25, 1.25, "cm"),
-            axis.ticks.y = element_blank(),
-            axis.title.x = element_blank(),
-            axis.text.x = element_text(size=30),
-            axis.text.y = element_blank(),
-            axis.title.y = element_text(size=40),
-            legend.position = "none"))
-    dev.off()
-
-    # save significant spreads
-    # tiff(file=fn_mntd_spread_tiff, units="px", width=2880, height=1800)
-    # print(ggplot(df_mntd_melt_spread, aes(x=variable, y=busco)) +
-    #     geom_tile(aes(fill=value), color="white") +
-    #     ggtitle("BUSCOs with Reference-based Spreads") + ylab("BUSCO") +
-    #     scale_fill_manual(values=c("white","blue")) +
-    #     scale_x_discrete(guide = guide_axis(angle = 45)) +
-    #     theme(plot.title = element_text(hjust = 0.5, size = 50),
-    #         plot.margin = margin(1.25, 1.25, 1.25, 1.25, "cm"),
-    #         axis.ticks.y = element_blank(),
-    #         axis.title.x = element_blank(),
-    #         axis.text.x = element_text(size=30),
-    #         axis.text.y = element_blank(),
-    #         axis.title.y = element_text(size=40),
-    #         legend.position = "none"))
-    # dev.off()
+    return(tre)
 }
 
 # function: extract R2 and p-value
@@ -516,4 +395,44 @@ f_extract_summary_lm <- function(lm_result) {
     })
 
     return(list(rsquared=rsquared, pvalue=pvalue))
+}
+
+# function: check the closest reference given reads
+f_check_closest_ref <- function(dist_matrix, species_read, ls_species_ref) {
+    # initiate variables
+    closest_ref <- ls_species_ref[1]
+    closest_ref_dist <- dist_matrix[rownames(dist_matrix) == species_read, colnames(dist_matrix) == ls_species_ref[1]]
+
+    # return the closest reference if there is only one reference
+    len_ls_species_ref <- length(ls_species_ref)
+    if (len_ls_species_ref == 1) {
+        return (closest_ref)
+    }
+
+    # iterate over reference sequence
+    for (ref in ls_species_ref[2:len_ls_species_ref]) {
+        # check the phylogenetic distance
+        ref_dist <- dist_matrix[rownames(dist_matrix) == species_read, colnames(dist_matrix) == ref]
+
+        # update the closest reference is distance is smaller
+        if (ref_dist < closest_ref_dist) {
+            closest_ref <- ref
+            closest_ref_dist <- ref_dist
+        }
+    }
+
+    # return the closest reference
+    return (closest_ref)
+}
+
+# function: calculate normalised RF distance between two trees
+f_calculate_nRF <- function(fn_tree_one, fn_tree_two) {
+    # open the two treefiles
+    tree_one <- ape::read.tree(fn_tree_one)
+    tree_two <- ape::read.tree(fn_tree_two)
+
+    # calculate nRF
+    nrf_dist <- phangorn::RF.dist(tree_one, tree_two, normalize=TRUE, check.labels=TRUE, rooted=FALSE)
+
+    return(nrf_dist)
 }

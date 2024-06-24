@@ -11,7 +11,7 @@ SRR25119765    E.fibrosa    FALSE
 SRR25119773    E.guilfoylei    FALSE
 SRR25119766    E.lansdowneana    FALSE
 SRR25119767    E.leucophloia    FALSE
-SRR25119777    E.sideroxylon_E.melliodora    FALSE
+SRR25119777    E.sid_E.mel    FALSE
 SRR25119768    E.paniculata    FALSE
 SRR25119769    E.polyanthemos    FALSE
 SRR25119774    E.pumila    FALSE
@@ -21,10 +21,10 @@ SRR17459857    E.albens    FALSE
 SRR25119758    E.marginata    FALSE
 SRR17459856    E.melliodora    TRUE
 SRR17459855    E.sideroxylon    FALSE
-SRR25119783    E.brandiana    FALSE
+SRR25119783    E.brandiana    TRUE
 SRR25119784    E.cloeziana    FALSE
 SRR25119756    E.coolabah    FALSE
-SRR25119757    E.decipiens    FALSE
+SRR25119757    E.decipiens    TRUE
 SRR25119771    E.grandis    FALSE
 SRR25119764    E.ANBG9806169    FALSE
 SRR25119786    E.virginea    TRUE

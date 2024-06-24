@@ -22,11 +22,15 @@ ls_refseq <- df_refs$id
 # list of short reads
 df_reads <- data.table::fread(params$file_shortreads)
 ls_shortreads <- df_reads$id[df_reads$is_check]
+if (length(ls_shortreads) < params$min_taxa) {
+    log4r::error(fn_logger, "Number of representative species is lower than minimum number of taxa. Exited.")
+    knitr::knit_exit()
+}
 
 # list of prefix
 ls_prefix <- outer(ls_shortreads, ls_refseq, FUN = function(x, y) paste(x, y, sep = "--"))
 
-# coutput directories
+# output directories
 dir_check_shortreads <- paste0(dir_current, "/busco_check/short_reads/")
 dir_readmap <- paste0(dir_current, "/busco_check/readmap/")
 
@@ -36,8 +40,10 @@ lapply(list(dir_check_shortreads,dir_readmap), function(x){if(!dir.exists(x)) di
 
 ```{r check-readmap-thread, include=FALSE}
 min_read_quality <- 25
+is_check_coverage <- FALSE
 
 thread_bwamem2 <- ifelse(params$thread < 50, params$thread, 50)
+thread_qualimap <- ifelse(params$thread < 50, params$thread, 50)
 thread_adapterremoval <- ifelse(params$thread < 10, params$thread, 10)
 thread_samtools <- ifelse(params$thread < 10, params$thread, 10)
 ```
@@ -81,6 +87,12 @@ if (length(ls_shortread_qc) > 0) {
 }
 ```
 
+```{r}
+# print the number of filtered short reads in HTML document
+cat(paste0("Available filtered short reads (", length(ls_shortread_done), "/", length(ls_shortreads), ")"))
+cat(paste("Short reads to be filtered:", length(ls_shortread_qc)))
+```
+
 ```{r check-readmap-qcreads, include=is_qcreads, eval=is_qcreads}
 f_write_log(fn_log=fn_log, msg=paste("Running AdapterRemoval using", thread_adapterremoval, "threads"))
 
@@ -116,6 +128,7 @@ foreach (read = ls_shortread_qc) %dopar% {
 stopCluster(nwcl)
 ```
 
+## Map short reads to reference using BWA-MEM2
 ```{r check-readmap-refmap, include=FALSE}
 # create data.frame to store directory of reference sequence
 df_refseq_dir <- data.frame(id=character(), dir=character())
@@ -137,7 +150,6 @@ for (ref in ls_refseq) {
 }
 ```
 
-## Map short reads to reference using BWA-MEM2
 ```{r, include=FALSE}
 f_write_log(fn_log=fn_log, msg=c("", "------------ Read Mapping ----------"))
 
@@ -153,8 +165,8 @@ if (params$redo) {
 } else {
     for (prefix in ls_prefix) {
         # check if file exists
-        file_sam <- paste0(dir_readmap, prefix, "/", prefix, ".sam")
-        if (file.exists(file_sam)) {
+        file_bam <- paste0(dir_readmap, prefix, "/", prefix, ".bam")
+        if (file.exists(file_bam)) {
             ls_readmap_done <- c(ls_readmap_done, paste("-", prefix))
             next
         }
@@ -176,6 +188,12 @@ if (length(ls_readmap_run) > 0) {
 }
 ```
 
+```{r}
+# print the number of mapped reads in HTML document
+cat(paste0("Available mapped reads (", length(ls_readmap_done), "/", length(ls_prefix), ")"))
+cat(paste("Short reads to be mapped:", length(ls_readmap_run)))
+```
+
 ```{r check-readmap, include=is_readmap, eval=is_readmap}
 f_write_log(fn_log=fn_log, msg=paste("Running BWA-MEM2 using", thread_bwamem2, "threads"))
 
@@ -193,6 +211,7 @@ foreach (prefix = ls_readmap_run) %dopar% {
 
     # output file
     file_sam <- paste0(dir_output, prefix, ".sam")
+    file_bam <- paste0(dir_output, prefix, ".bam")
 
     # extract reference and short reads
     read <- unlist(strsplit(prefix, split="--"))[1]
@@ -215,79 +234,19 @@ foreach (prefix = ls_readmap_run) %dopar% {
     
     # run BWA-MEM2
     f_read_mapping(file_ref, file_fastq_one, file_fastq_two, thread_bwamem2, params$exe_bwamem2, file_sam)
-    log4r::info(fn_logger, paste0("File created: SAM file for ", prefix, "."))
-}
 
-stopCluster(nwcl)
-```
+    # convert SAM to BAM
+    f_sam_to_bam(prefix, dir_output, thread_bwamem2, params$exe_samtools)
 
-## Convert SAM to BAM
-```{r, include=FALSE}
-f_write_log(fn_log=fn_log, msg=c("", "---------- File Conversion ---------"))
-
-# set up variables
-is_convert <- FALSE
-
-ls_convert_done <- c()
-ls_convert_run <- c()
-
-# iterate over prefix
-if (params$redo) {
-    ls_convert_run <- ls_prefix
-} else {
-    for (prefix in ls_prefix) {
-        # check if file exists
-        file_bam <- paste0(dir_readmap, prefix, "/", prefix, ".bam")
-        if (file.exists(file_bam)) {
-            ls_convert_done <- c(ls_convert_done, paste("-", prefix))
-            next
-        }
-
-        # add prefix to to-do-list
-        ls_convert_run <- c(ls_convert_run, prefix)
-    }
-}
-
-# output log file for available BAM files
-if (length(ls_convert_done) > 0) {
-    ls_convert_done <- c(paste0("Available BAM files (", length(ls_convert_done), "/", length(ls_prefix), ")"), ls_convert_done, "")
-    f_write_log(fn_log=fn_log, msg=ls_convert_done)
-}
-
-# update variable for the next analysis
-if (length(ls_convert_run) > 0) {
-    is_convert <- TRUE
-}
-```
-
-```{r check-readmap-conversion, include=is_convert, eval=is_convert}
-f_write_log(fn_log=fn_log, msg=paste("Running Samtools using", thread_samtools, "threads"))
-
-# create doSNOW cluster
-nwcl <- makeCluster(floor(params$thread/thread_samtools))
-doSNOW::registerDoSNOW(nwcl)
-
-# iterate over reference sequences
-foreach (prefix = ls_convert_run) %dopar% {
-    # output directory
-    dir_output <- paste0(dir_readmap, prefix, "/")
-
-    # check if input file exists
-    file_sam <- paste0(dir_output, prefix, ".sam")
-    if (!file.exists(file_sam)) {
-        log4r::warn(fn_logger, paste0("File not found: SAM file for ", prefix, ". Skipped."))
-        return(NULL)
-    }
-
-    # convert SAM
-    f_sam_to_bam(prefix, dir_output, thread_samtools, params$exe_samtools)
+    # delete SAM file
+    unlink(file_sam)
     log4r::info(fn_logger, paste0("File created: BAM file for ", prefix, "."))
 }
 
 stopCluster(nwcl)
 ```
 
-```{r check-readmap-coverage}
+```{r check-readmap-coverage, include=is_check_coverage, eval=is_check_coverage}
 # set up variable
 ls_coverage_run <- c()
 
@@ -305,7 +264,7 @@ if (params$redo) {
 }
 
 # create doSNOW cluster
-nwcl <- makeCluster(params$thread)
+nwcl <- makeCluster(floor(params$thread/thread_qualimap))
 doSNOW::registerDoSNOW(nwcl)
 
 # iterate over mapped reads
@@ -317,7 +276,8 @@ foreach (prefix = ls_coverage_run) %dopar% {
     # run QualiMap
     cmd_coverage <- paste(params$exe_qualimap, "bamqc",
                           "-bam", file_bam,
-                          "-outdir", dir_qualimap_output)
+                          "-outdir", dir_qualimap_output,
+                          "-nt", thread_qualimap)
     system(cmd_coverage)
 }
 
@@ -364,6 +324,12 @@ if (length(ls_variant_run) > 0) {
 }
 ```
 
+```{r}
+# print the number of VCF files in HTML document
+cat(paste0("Available VCF files (", length(ls_variant_done), "/", length(ls_prefix), ")"))
+cat(paste("Variants to be called:", length(ls_variant_run)))
+```
+
 ```{r check-readmap-calling, include=is_variant, eval=is_variant}
 f_write_log(fn_log=fn_log, msg=paste("Running Bcftools using", thread_samtools, "threads"))
 
@@ -372,7 +338,7 @@ nwcl <- makeCluster(floor(params$thread/thread_samtools))
 doSNOW::registerDoSNOW(nwcl)
 
 # iterate over reference sequences
-foreach (prefix = ls_convert_run) %dopar% {
+foreach (prefix = ls_variant_run) %dopar% {
     # output directory
     dir_output <- paste0(dir_readmap, prefix, "/")
 

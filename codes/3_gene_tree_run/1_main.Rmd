@@ -1,5 +1,5 @@
 ---
-title: "BUSCO Check for Reference Sequences Bias"
+title: "Extract Gene Trees from Short Reads"
 author: "Jeremias Ivan"
 date: "`r format(Sys.time(), '%d %B %Y, %H:%M%p')`"
 
@@ -16,55 +16,33 @@ params:
   outdir: "~/busco"
   thread: 5
   redo: TRUE
+  
+  gene_type: "easy353"
 
-  # input files
-  file_refseq: ""
+  # list of accession numbers to be downloaded
   file_shortreads: ""
   file_adapters: ""
-  file_genome_treefile: ""
-  
-  # executables
+
   exe_adapterremoval: ""
-  exe_bwamem2: ""
-  exe_samtools: ""
-  exe_bcftools: ""
-  exe_qualimap: ""
-  exe_treeshrink: ""
 
-  exe_gffread: ""
-  exe_gff2bed: ""
+  # Easy353 parameters
+  exe_build_database: ""
+  exe_easy353: ""
 
-  exe_busco: ""
-  exe_iqtree2: ""
-  exe_mafft: ""
-
-  # BUSCO pipeline
-  min_taxa: 4
-
-  busco_lineage: ""
-  busco_mode: "genome"
-  type: "coordinate"
-
-  min_busco_depth: 10
-  max_busco_depth: 60
-  include_incomplete: TRUE
+  easy353_taxonomy: ""
 ---
 
 ## Load required libraries and functions
 ```{r}
 source(paste0(params$codedir, "/1_data_download/functions.R"))
-source(paste0(params$codedir, "/2_busco_check/functions.R"))
+source(paste0(params$codedir, "/3_gene_tree_run/functions.R"))
 
 library(doSNOW)
 ```
 
 ```{r, include=FALSE}
-# install.packages("ape")
-# install.packages("Biostrings")
 # install.packages("data.table")
 # install.packages("log4r")
-# install.packages("phangorn")
-# install.packages("tidyverse")
 
 # store initial system time
 sys_tic <- Sys.time()
@@ -82,7 +60,7 @@ if (!dir.exists(logdir)) {
 }
 
 # create log file
-fn_log <- paste0(logdir, params$prefix, ".check.log")
+fn_log <- paste0(logdir, params$prefix, ".genetree.log")
 log_appender <- log4r::file_appender(fn_log, append = TRUE, layout = log4r::default_log_layout())
 fn_logger <- log4r::logger(threshold = "INFO", appenders = log_appender)
 if (!file.exists(fn_log) || params$redo) {
@@ -93,16 +71,7 @@ if (!file.exists(fn_log) || params$redo) {
 knitr::opts_knit$set(root.dir = currentdir)
 ```
 
-```{r child = paste0(params$codedir,"/2_busco_check/2_readmap.Rmd")}
-```
-
-```{r child = paste0(params$codedir,"/2_busco_check/3_busco_ref.Rmd")}
-```
-
-```{r child = paste0(params$codedir,"/2_busco_check/4_summary.Rmd")}
-```
-
-```{r child = paste0(params$codedir,"/2_busco_check/5_busco_tree.Rmd")}
+```{r child = paste0(params$codedir,"/3_gene_tree_run/2_run.Rmd")}
 ```
 
 ```{r, include=FALSE}

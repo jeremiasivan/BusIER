@@ -44,6 +44,12 @@ if (length(ls_busco_read_run) > 0) {
 }
 ```
 
+```{r}
+# print the number of available mapped reads BUSCO in HTML document
+cat(paste0("Available mapped reads BUSCO (", length(ls_busco_read_done), "/", length(ls_prefix), ")"))
+cat(paste("Mapped reads BUSCO to run:", length(ls_busco_read_run)))
+```
+
 ```{r check-busco-read-p, include=is_busco_read, eval=is_busco_read}
 f_write_log(fn_log=fn_log, msg=paste("Running BUSCO using", thread_busco, "threads"))
 
@@ -66,18 +72,54 @@ stopCluster(nwcl)
 
 ## Extract common BUSCOs between reference sequences and mapped reads
 ```{r check-busco-common-p}
+# output data.table
+df_chr_busco <- data.table::data.table(ref=character(), read=character(), busco=character(), is_error=logical())
+
 # iterate over mapped reads
 for (prefix in ls_prefix) {
   # directory for BUSCO alignments
   dir_buscos <- paste0(dir_busco_read, prefix, "/run_", params$busco_lineage, "/busco_sequences/single_copy_busco_sequences/")
   
+  # extract short read and reference sequence IDs
+  read <- unlist(strsplit(prefix, split="--"))[1]
+  ref <- unlist(strsplit(prefix, split="--"))[2]
+
   # remove file extension .fna
   busco_ids <- list.files(dir_buscos, pattern = "*.fna$", full.names = F, recursive = F)
   busco_ids <- sapply(busco_ids, function(x) { gsub(".fna", "", x) })
   
-  # extract shared BUSCOs between reference sequences
-  shared_busco <- intersect(shared_busco, busco_ids)
+  # update data.table
+  df_chr_busco_temp <- data.table::data.table(ref=rep(ref,length(busco_ids)),
+                                              read=rep(read,length(busco_ids)),
+                                              busco=busco_ids,
+                                              is_error=rep(FALSE, length(busco_ids)))
+  df_chr_busco <- rbind(df_chr_busco, df_chr_busco_temp)
 }
+
+# update the number of BUSCO
+if (is.null(df_mapped_reads_busco) || params$redo) {
+    df_mapped_reads_busco <- df_chr_busco
+    data.table::fwrite(df_chr_busco, file=fn_mapped_reads_busco, sep="\t", quote=F)
+
+    if (!params$include_incomplete) {
+        ls_problematic_busco <- unique(df_chr_busco$busco[df_chr_busco$is_error])
+        shared_busco <- shared_busco[!shared_busco %in% ls_problematic_busco]
+    } else {
+        # count the number of errors per BUSCO
+        df_mapped_reads_busco_count <- df_chr_busco %>%
+            group_by(busco,read) %>%
+            summarise(n_ref=sum(ifelse(!error, 1, 0))) %>%
+            group_by(busco) %>%
+            summarise(n_read=sum(ifelse(n_ref>0, 1, 0)))
+        
+        # update the BUSCO list
+        ls_problematic_busco <- unique(df_mapped_reads_busco_count$busco[df_mapped_reads_busco_count$n_read < params$min_taxa])
+        shared_busco <- shared_busco[!shared_busco %in% ls_problematic_busco]
+    }
+}
+
+# print the number of BUSCO in HTML document
+cat(paste("Number of shared BUSCO between reference and mapped reads:", length(shared_busco)))
 
 # check if shared BUSCOs found
 if (length(shared_busco) == 0) {

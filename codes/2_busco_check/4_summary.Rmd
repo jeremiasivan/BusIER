@@ -23,35 +23,35 @@ for (read in ls_shortreads) {
 
 # output files
 fn_prefix <- paste0(dir_check_summary, params$prefix)
-fn_cor_summary <- paste0(fn_prefix, ".cor.sumtable")
+fn_cor_summary <- paste0(fn_prefix, ".cor.p.sumtable")
 
 fn_dist_tiff <- paste0(dir_check_summary, params$prefix, ".dist.tiff")
 ```
 
-```{r check-summary-busco-update, include=FALSE}
-# create a new vector to store the list of BUSCOs
-shared_busco_filtered <- shared_busco
-
+```{r check-summary-busco-update}
 # iterate over BUSCOs
-for (busco in shared_busco_filtered) {
+for (busco in shared_busco) {
     # check if treefile exists
     fn_tree <- paste0(dir_busco_tree, busco, "/", busco, "_aligned.fa.treefile")
     if (!file.exists(fn_tree)){
-        shared_busco_filtered <- shared_busco_filtered[shared_busco_filtered != busco]
+        shared_busco <- shared_busco[shared_busco != busco]
 
         log4r::info(fn_logger, paste0("File not found: BUSCO tree for ", busco, ". Removed from analysis."))
         next
     }
 }
 
+# print the number of BUSCO in HTML document
+cat(paste("Number of shared BUSCO after filtering missing treefile:", length(shared_busco)))
+
 # check if list is of length zero
-if (length(shared_busco_filtered) == 0) {
+if (length(shared_busco) == 0) {
     log4r::error(fn_logger, "Error: list of BUSCO is of length zero. Exited.")
     knitr::knit_exit()
 }
 ```
 
-```{check-summary-species-map, include=FALSE}
+```{r check-summary-species-map, include=FALSE}
 # extract representative species
 df_reads_ref <- data.table::data.table(species=character(), reads=character(), ref=character())
 
@@ -74,7 +74,7 @@ nwcl <- makeCluster(params$thread)
 doSNOW::registerDoSNOW(nwcl)
 
 # iterate over BUSCOs
-ls_output <- foreach (busco = shared_busco_filtered, .combine='c') %dopar% {
+ls_output <- foreach (busco = shared_busco, .combine='c') %dopar% {
     # check if treefile exists
     fn_tree <- paste0(dir_busco_tree, busco, "/", busco, "_aligned.fa.treefile")
 
@@ -98,18 +98,24 @@ ls_output <- foreach (busco = shared_busco_filtered, .combine='c') %dopar% {
 stopCluster(nwcl)
 
 # visualization
-tiff(file=fn_dist_tiff, units="px", width=2880, height=1800)
-print(ggplot(data.frame(ls_output), aes(x=ls_output, xmin=0, xmax=max(ls_output))) + 
+plot <- ggplot(data.frame(ls_output), aes(x=ls_output, xmin=0, xmax=max(ls_output))) + 
     geom_histogram(bins = 100) +
-    ggtitle("BUSCO Phylogenetic Distance between Mapped Reads and Reference") + ylab("Count") +
-    theme(plot.title = element_text(hjust=0.5, size=50),
-        plot.margin = margin(1.25, 1.25, 1.25, 1.25, "cm"),
-        axis.text.x = element_text(size=30),
-        axis.title.x = element_blank(),
-        axis.text.y = element_text(size=30),
-        axis.title.y = element_text(size=40, margin=margin(t=0, r=20, b=0, l=0)),
-        legend.position = "none"))
+    ggtitle("BUSCO Phylogenetic Distance between Mapped Reads and Reference") + ylab("Count")
+
+tiff(file=fn_dist_tiff, units="px", width=2880, height=1800)
+print(plot + theme(plot.title = element_text(hjust=0.5, size=50),
+                   plot.margin = margin(1.25, 1.25, 1.25, 1.25, "cm"),
+                   axis.text.x = element_text(size=30),
+                   axis.title.x = element_blank(),
+                   axis.text.y = element_text(size=30),
+                   axis.title.y = element_text(size=40, margin=margin(t=0, r=20, b=0, l=0)),
+                   legend.position = "none"))
 dev.off()
+```
+
+```{r, out.width="100%", echo=FALSE}
+print(plot + theme(plot.title = element_text(face = "bold"),
+                   plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm")))
 ```
 
 ## Correlation analysis on BUSCO phylogenetic distances
@@ -119,7 +125,7 @@ nwcl <- makeCluster(params$thread)
 doSNOW::registerDoSNOW(nwcl)
 
 # iterate over BUSCOs
-ls_output <- foreach (busco = shared_busco_filtered, .combine='c') %dopar% {
+ls_output <- foreach (busco = shared_busco, .combine='c') %dopar% {
     library(ggplot2)
 
     # output variables

@@ -1,8 +1,13 @@
 ---
-title: "Data Download from NCBI"
+title: "Download Data from NCBI"
+author: "Jeremias Ivan"
+date: "`r format(Sys.time(), '%d %B %Y, %H:%M%p')`"
+
 output:
   html_document:
     code_folding: show
+    toc: true
+    toc_float: true
 
 params:
   # general
@@ -16,6 +21,7 @@ params:
   file_refseq: ""
   file_shortreads: ""
 
+  # executables
   exe_datasets: ""
   bin_sratoolkit: ""
 ---
@@ -130,6 +136,12 @@ if (length(ls_refseq) == 0 || is.null(ls_refseq)) {
 }
 ```
 
+```{r}
+# print the number of reference sequences to be downloaded in HTML document
+cat(paste0("Available reference sequences (", length(ls_refseq_available), "/", length(ls_refseq), ")"))
+cat(paste("Reference sequences to be downloaded:", length(ls_refseq_download)))
+```
+
 ```{r download-refseq, include=is_refseq_available, eval=is_refseq_available}
 # update number of thread
 nthread <- params$thread
@@ -218,6 +230,12 @@ if (length(ls_shortreads) == 0 || is.null(ls_shortreads)) {
     is_shortreads_available <- TRUE
   }
 }
+```
+
+```{r}
+# print the number of short reads to be downloaded in HTML document
+cat(paste0("Available short reads (", length(ls_reads_available), "/", length(ls_shortreads), ")"))
+cat(paste("Short reads to be downloaded:", length(ls_reads_download)))
 ```
 
 ```{r download-shortreads, include=is_shortreads_available, eval=is_shortreads_available}

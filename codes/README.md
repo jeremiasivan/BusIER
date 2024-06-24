@@ -23,7 +23,7 @@ In this step, we download the reference assembly and short reads from NCBI. The 
 | `bin_sratoolkit`         | `bin` directory for SRA-Toolkit                                                                                                       |
 
 #### Output
-Running the code will create the following folders:
+Running the code will create the following folders in `outdir/prefix`:
 - `refseq/`: folder with all reference assemblies
 - `short_reads/`: folder with all raw short reads
 
@@ -40,7 +40,7 @@ In this step, we run correlation analysis to check for the presence of reference
 | `file_refseq`            | Metadata file for reference assembly (e.g., `BusIER/data/eucs_refseq.txt`)                                                            |
 | `file_shortreads`        | Metadata file for short reads (e.g., `BusIER/data/eucs_shortreads.txt`)                                                               |
 | `file_adapters`          | Metadata file for sequencing adapters (e.g., `BusIER/data/eucs_adapter.txt`)                                                          |
-| `file_refseq_chr`        | Metadata file for reference assembly chromosomes (e.g., `BusIER/data/eucs_refseq_chr.txt`)                                            |
+| `file_genome_treefile`   | Tree file for reference sequences (e.g., `BusIER/data/eucs.treefile`)                                                                 |
 | `exe_adapterremoval`     | Executable for AdapterRemoval                                                                                                         |
 | `exe_bwamem2`            | Executable for BWA-MEM2                                                                                                               |
 | `exe_samtools`           | Executable for Samtools                                                                                                               |
@@ -52,9 +52,26 @@ In this step, we run correlation analysis to check for the presence of reference
 | `exe_busco`              | Executable for BUSCO                                                                                                                  |
 | `exe_iqtree2`            | Executable for IQ-TREE 2                                                                                                              |
 | `exe_mafft`              | Executable for MAFFT                                                                                                                  |
+| `min_taxa`               | Minimum number of representative short reads                                                                                          |
 | `busco_lineage`          | Lineage for BUSCO pipeline                                                                                                            |
 | `busco_mode`             | Mode for BUSCO pipeline. Options: genome, transcriptome, or protein                                                                   |
 | `type`                   | Method to extract BUSCOs from mapped reads. Options: coordinate or pipeline                                                           |
+| `min_busco_depth`        | Minimum BUSCO depth for mapped reads. Applicable only for `type` == "coordinate"                                                      |
+| `max_busco_depth`        | Maximum BUSCO depth for mapped reads. Applicable only for `type` == "coordinate"                                                      |
+| `include_incomplete`     | Include BUSCOs that do not have all the mapped reads (`TRUE`) or not (`FALSE`)                                                        |
+
+#### Output
+Running the code will create the following folders in `outdir/prefix`:
+- `busco_lineage/`: folder with the lineage dataset for running BUSCO pipeline
+- `busco_check/`
+    - `short_reads/`: folder with filtered short reads from AdapterRemoval
+    - `readmap/`: folder with all mapped reads
+    - `busco_refseq/`: folder with all BUSCO runs on individual reference assembly
+    - `busco_coordinate/` and/or `busco_pipeline/`
+        - `short_reads/`: folder with all BUSCO alignments for all mapped reads
+        - `trees/`: folder with all BUSCO MSAs and trees for reference assemblies and mapped reads
+        - `summary/`: folder with summary files for correlation analyses
+    - `busco_tree/`: folder with individual run for specific number of reference assemblies to calculate the nRF distances
 
 ---
-*Last update: 25 April 2024 by Jeremias Ivan*
+*Last update: 19 June 2024 by Jeremias Ivan*

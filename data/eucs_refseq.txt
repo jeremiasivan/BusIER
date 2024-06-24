@@ -20,7 +20,7 @@ GCA_014182845.1    C.calophylla    Outgroup
 GCA_014182855.1    E.regnans    Eucalyptus
 GCA_014182885.2    E.caleyi    Symphyomyrtus
 GCA_014182895.1    A.floribunda    Outgroup
-GCA_016097485.1    E.sideroxylon_E.melliodora    Symphyomyrtus
+GCA_016097485.1    E.sid_E.mel    Symphyomyrtus
 GCA_016097545.1    E.victrix    Symphyomyrtus
 GCA_016097595.1    E.pumila    Symphyomyrtus
 GCA_016097605.1    E.guilfoylei    Cruciformes

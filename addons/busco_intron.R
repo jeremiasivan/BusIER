@@ -1,13 +1,13 @@
 # This script aims to extract intronic regions from BUSCOs. There should be only one reference sequence, but multiple mapped reads.
 # Written by: Jeremias Ivan
-# Last updated: 5 April 2024
+# Last updated: 18 June 2024
 
 ###################################################################
 ######                     INPUT VARIABLES                   ######
 ###################################################################
 file_metadata <- "/home/jeremias/BusIER/addons/busco_intron_metadata.tsv"
 
-dir_busco_ref <- "/data/jeremias/eucs/030324/busco_check/busco_refseq/GCF_016545825.1/run_eudicots_odb10/busco_sequences/single_copy_busco_sequences/"
+dir_busco_ref <- "/data/jeremias/run_eudicots_odb10/busco_sequences/single_copy_busco_sequences/"
 dir_out <- "/data/jeremias/eucs/intron/"
 
 exe_gffread <- "/home/jeremias/gffread/gffread"
