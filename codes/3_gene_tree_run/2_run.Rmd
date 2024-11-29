@@ -1,0 +1,136 @@
+---
+title: "Extraction of Gene Trees from Short Reads"
+---
+
+```{r run-setup, include=FALSE}
+f_write_log(fn_log=fn_log,
+            msg=c("", "####################################",
+                      "####         Gene Trees         ####",
+                      "####################################"))
+
+# get current working directory
+dir_current <- getwd()
+
+# directory for short reads
+dir_shortreads <- paste0(dir_current, "/short_reads/")
+
+# list of short reads
+df_reads <- data.table::fread(params$file_shortreads)
+ls_shortreads <- df_reads$id
+
+# output directories
+dir_run <- paste0(dir_current, "/run/")
+dir_run_shortreads <- paste0(dir_run, "short_reads/")
+
+# check the BUSCO extraction method
+if (params$gene_type == "easy353" || params$gene_type == "" || is.null(params$gene_type)) {
+    dir_run <- paste0(dir_run, "easy353/")
+    f_write_log(fn_log=fn_log, msg="Extracting gene trees using Easy353.")
+} else if (params$gene_type == "busco") {
+    log4r::error(fn_logger, "BUSCO-based method has not been implemented. Exited.")
+    knitr::knit_exit()
+} else {
+    log4r::error(fn_logger, "Invalid type of gene tree extraction method. Exited.")
+    knitr::knit_exit()
+}
+
+dir_run_alignment <- paste0(dir_run, "alignments/")
+dir_run_tree <- paste0(dir_run, "trees/")
+
+# create directory if not exist
+lapply(list(dir_run_shortreads,dir_run_database,dir_run_alignment,dir_run_tree), function(x){if(!dir.exists(x)) dir.create(x, recursive=T)})
+```
+
+```{r run-thread, include=FALSE}
+min_read_quality <- 25
+
+thread_adapterremoval <- ifelse(params$thread < 10, params$thread, 10)
+```
+
+## QC of short reads
+```{r, include=FALSE}
+f_write_log(fn_log=fn_log, msg=c("", "----- Quality Control of FASTQ -----"))
+
+# set up variables
+is_qcreads <- FALSE
+
+ls_shortread_done <- c()
+ls_shortread_qc <- c()
+
+# iterate over short reads
+if (params$redo) {
+    ls_shortread_qc <- ls_shortreads
+} else {
+    for (read in ls_shortreads) {
+        # check if output file exists
+        file_fastq <- paste0(dir_run_shortreads, read, ".pair1.truncated")
+        if (file.exists(file_fastq)) {
+            ls_shortread_done <- c(ls_shortread_done, paste("-", read))
+            next
+        }
+
+        # add short reads to to-do-list
+        ls_shortread_qc <- c(ls_shortread_qc, read)
+    }
+}
+
+# output log file for available filtered short reads
+if (length(ls_shortread_done) > 0) {
+    ls_shortread_done <- c(paste0("Available filtered short reads (", length(ls_shortread_done), "/", length(ls_shortreads), ")"), ls_shortread_done, "")
+    f_write_log(fn_log=fn_log, msg=ls_shortread_done)
+}
+
+# update variable for the next analysis
+if (length(ls_shortread_qc) > 0) {
+    is_qcreads <- TRUE
+}
+```
+
+```{r}
+# print the number of filtered short reads in HTML document
+cat(paste0("Available filtered short reads (", length(ls_shortread_done), "/", length(ls_shortreads), ")"))
+cat(paste("Short reads to be filtered:", length(ls_shortread_qc)))
+```
+
+```{r run-qcreads, include=is_qcreads, eval=is_qcreads}
+f_write_log(fn_log=fn_log, msg=paste("Running AdapterRemoval using", thread_adapterremoval, "threads"))
+
+# create doSNOW cluster
+nwcl <- makeCluster(floor(params$thread/thread_adapterremoval))
+doSNOW::registerDoSNOW(nwcl)
+
+# iterate over short reads
+foreach (read = ls_shortread_qc) %dopar% {
+    prefix <- paste0(dir_run_shortreads, read)
+
+    # extract FASTQ files
+    dir_reads <- paste0(dir_shortreads, read, "/fastq/")
+    fn_fastq_one <- paste0(dir_reads, read, "_1.fastq")
+    fn_fastq_two <- paste0(dir_reads, read, "_2.fastq")
+    
+    # check the forward FASTQ file
+    if (!file.exists(fn_fastq_one)) {
+        log4r::warn(fn_logger, paste0("File not found: FASTQ file for ", read, ". Skipped."))
+        return(NULL)
+    }
+
+    # check the reverse FASTQ file
+    if (!file.exists(fn_fastq_two)) {
+        fn_fastq_two <- NULL
+    }
+    
+    # run AdapterRemoval
+    f_qc_short_reads(fn_fastq_one, fn_fastq_two, params$file_adapters, prefix, min_read_quality, thread_adapterremoval, params$exe_adapterremoval)
+    log4r::info(fn_logger, paste0("File created: filtered FASTQ file for ", read, "."))
+}
+
+stopCluster(nwcl)
+```
+
+## Extract gene trees
+```{r}
+# run gene tree extraction for short reads
+if (params$gene_type == "easy353" || params$gene_type == "" || is.null(params$gene_type)) {
+    knitr::knit_child(paste0(params$codedir,"/3_gene_tree_run/2a_easy353.Rmd"))
+}
+```

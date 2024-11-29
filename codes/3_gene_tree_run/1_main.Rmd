@@ -1,0 +1,83 @@
+---
+title: "Extract Gene Trees from Short Reads"
+author: "Jeremias Ivan"
+date: "`r format(Sys.time(), '%d %B %Y, %H:%M%p')`"
+
+output:
+  html_document:
+    code_folding: show
+    toc: true
+    toc_float: true
+
+params:
+  # general
+  codedir: "~/BusIER/codes"
+  prefix: ""
+  outdir: "~/busco"
+  thread: 5
+  redo: TRUE
+  
+  gene_type: "easy353"
+
+  # list of accession numbers to be downloaded
+  file_shortreads: ""
+  file_adapters: ""
+
+  exe_adapterremoval: ""
+
+  # Easy353 parameters
+  exe_build_database: ""
+  exe_easy353: ""
+
+  easy353_taxonomy: ""
+---
+
+## Load required libraries and functions
+```{r}
+source(paste0(params$codedir, "/1_data_download/functions.R"))
+source(paste0(params$codedir, "/3_gene_tree_run/functions.R"))
+
+library(doSNOW)
+```
+
+```{r, include=FALSE}
+# install.packages("data.table")
+# install.packages("log4r")
+
+# store initial system time
+sys_tic <- Sys.time()
+
+# create outdir
+currentdir <- paste0(params$outdir, "/", params$prefix)
+if (!dir.exists(currentdir)) {
+  dir.create(currentdir, recursive = T)
+}
+
+# create directory for log files
+logdir <- paste0(currentdir, "/logs/")
+if (!dir.exists(logdir)) {
+  dir.create(logdir, recursive = T)
+}
+
+# create log file
+fn_log <- paste0(logdir, params$prefix, ".genetree.log")
+log_appender <- log4r::file_appender(fn_log, append = TRUE, layout = log4r::default_log_layout())
+fn_logger <- log4r::logger(threshold = "INFO", appenders = log_appender)
+if (!file.exists(fn_log) || params$redo) {
+  unlink(fn_log)
+  f_write_log(fn_log=fn_log, msg="BusIER")
+}
+
+knitr::opts_knit$set(root.dir = currentdir)
+```
+
+```{r child = paste0(params$codedir,"/3_gene_tree_run/2_run.Rmd")}
+```
+
+```{r, include=FALSE}
+# store final system time
+sys_toc <- Sys.time()
+
+# write the system time in log file
+f_write_log(fn_log=fn_log, msg=c("", paste0("Total elapsed time: ", round(as.numeric(difftime(sys_toc, sys_tic, units = "mins")), 3), " mins")))
+```
