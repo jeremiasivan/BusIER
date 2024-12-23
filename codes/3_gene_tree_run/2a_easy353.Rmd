@@ -1,0 +1,70 @@
+---
+title: "Run Easy353 to Extract Gene Trees"
+---
+
+## Download database
+```{r easy353-setup, include=FALSE}
+# create output directory
+dir_run_database <- paste0(dir_run, params$easy353_taxonomy, "_db/")
+if (!dir.exists(dir_run_database)) {
+    dir.create(dir_run_database, recursive=T)
+}
+
+# check if database exists
+ls_fasta <- list.files(paste0(dir_run_database, "353gene/"), pattern="*.fasta$", recursive=F, full.names=F)
+if (length(ls_fasta)==0 || params$redo) {
+    # download database
+    f_easy353_build_database(params$easy353_taxonomy, dir_run_database, params$thread, params$exe_build_database)
+}
+```
+
+## Extract BUSCO based on reference coordinates
+```{r easy353-run}
+# set up thread
+nthread <- ifelse(params$thread > length(ls_shortreads), length(ls_shortreads), params$thread)
+easy353_thread <- floor(params$thread / length(ls_shortreads))
+
+# set the minimum and maximum number of threads
+if (easy353_thread==0) {
+    easy353_thread <- 1
+} else if (easy353_thread>20) {
+    easy353_thread <- 20
+}
+
+# create doSNOW cluster
+nwcl <- makeCluster(nthread)
+doSNOW::registerDoSNOW(nwcl)
+
+# iterate over short reads
+foreach (read = ls_shortreads) %dopar% {
+    # output directory
+    dir_output <- paste0(dir_run_alignment, prefix, "/")
+    if (!dir.exists(dir_output)) {
+        dir.create(dir_output, recursive=T)
+    }
+
+    # list FASTA files
+    ls_fasta_temp <- list.files(paste0(dir_output, "assemble_out/"), pattern="*.a353.fasta$", recursive=F, full.names=F)
+    if (length(ls_fasta_temp)>0 && !params$redo) {
+        return(NULL)
+    }
+
+    # extract FASTQ file
+    file_fastq_one <- paste0(dir_run_shortreads, read, ".pair1.truncated")
+    if (!file.exists(file_fastq_one)) {
+        log4r::warn(fn_logger, paste0("File not found: filtered FASTQ file for ", read, ". Skipped."))
+        return(NULL)
+    }
+
+    file_fastq_two <- paste0(dir_run_shortreads, read, ".pair2.truncated")
+    if (!file.exists(file_fastq_two)) {
+        file_fastq_two <- NULL
+    }
+    
+    # run Easy353
+    f_easy353_run(file_fastq_one, file_fastq_two, dir_run_database, dir_output, easy353_thread, params$exe_easy353)
+    log4r::info(fn_logger, paste0("File created: Easy353 results for ", read, "."))
+}
+
+stopCluster(nwcl)
+```
